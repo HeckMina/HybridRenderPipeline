@@ -2,12 +2,18 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using UnityEngine.Rendering;
+
 namespace Alice.Rendering
 {
     public class RPNode : Node
     {
         public List<string> mDependentRTs=new List<string>();
         public string mOutputColor0="None", mOutputDS="None";
+        public RenderBufferLoadAction mColorRTLoadAction=RenderBufferLoadAction.Load;
+        public RenderBufferStoreAction mColorRTStoreAction=RenderBufferStoreAction.Store;
+        public RenderBufferLoadAction mDSRTLoadAction=RenderBufferLoadAction.Load;
+        public RenderBufferStoreAction mDSRTStoreAction=RenderBufferStoreAction.Store;
         GUIStyle mTextStyle = null;
         public RPNode(float inX, float inY, float inWidth, float inHeight) : base(inX, inY, inWidth, inHeight)
         {

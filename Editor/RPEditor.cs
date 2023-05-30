@@ -15,7 +15,7 @@ namespace Alice.Rendering
         Node mEditNameNode = null;
         Node mCurrentSelectedNode = null;
         RTSetting mRTSettingInfo = new RTSetting();
-        RPSetting mRPSettingInfo = new RPSetting();
+        RPSetting mRPSettingInfo = new RPSetting(0,0,300,400);
         Link mTempLink=null;
         bool mbShowCreateOptions = false;
         public static RPEditor mInstance = null;

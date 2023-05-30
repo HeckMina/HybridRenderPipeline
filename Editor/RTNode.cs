@@ -10,6 +10,7 @@ namespace Alice.Rendering
         public UnityEngine.RenderTextureFormat mFormat;
         public RTNode(float inX, float inY, float inWidth, float inHeight):base(inX,inY,inWidth,inHeight)
         {
+            mName="RenderTarget";
         }
         GUIStyle mTextStyle = null;
         override public void Draw()
