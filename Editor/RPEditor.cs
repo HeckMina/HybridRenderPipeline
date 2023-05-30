@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 
-namespace SSJJ
+namespace Alice.Rendering
 {
     public class RPEditor : EditorWindow
     {
@@ -19,17 +19,12 @@ namespace SSJJ
         Link mTempLink=null;
         bool mbShowCreateOptions = false;
         public static RPEditor mInstance = null;
-        [MenuItem("Edit/Render Pipeline Editor")]
-        static void CreateRenderPipeline()
-        {
-            RPEditor window = EditorWindow.GetWindow<RPEditor>();
-            window.titleContent = new GUIContent("渲染管线编辑器");
-            window.minSize = new Vector2(800,600);
-            window.Show();
-        }
         public RPEditor()
         {
             mInstance = this;
+        }
+        public void SetPipelineData(Hybrid.PipelineData inPipelineData){
+
         }
         void OnGUI()
         {

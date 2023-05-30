@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-namespace SSJJ
+namespace Alice.Rendering
 {
     public class RTSetting
     {

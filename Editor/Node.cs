@@ -4,7 +4,7 @@ using System;
 using UnityEngine;
 using UnityEditor;
 
-namespace SSJJ
+namespace Alice.Rendering
 {
     public class Node
     {

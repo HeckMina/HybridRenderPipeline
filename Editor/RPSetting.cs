@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 
-namespace SSJJ
+namespace Alice.Rendering
 {
     public class RPSetting
     {
