@@ -9,12 +9,15 @@ using System.Linq;
 using UnityEditor;
 #endif
 using UnityEngine;
+using Alice.Rendering;
 
 namespace Alice.Rendering.Hybrid
 {
     [ExcludeFromPreset]
     public class PipelineData : ScriptableObject
     {
+        public List<Node> mNodes=new List<Node>();
+        public List<Link> mLinks = new List<Link>();
 #if UNITY_EDITOR
         internal class CreateHybridPipelineDataAction : EndNameEditAction
         {

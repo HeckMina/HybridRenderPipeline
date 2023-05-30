@@ -18,17 +18,6 @@ namespace Alice.Rendering
             mRect = new Rect(inX, inY, inWidth, inHeight);
         }
         virtual public void Draw() { }
-        public void OnEditName()
-        {
-            mIsEditingName = true;
-            GUIUtility.hotControl = GUIUtility.GetControlID(FocusType.Keyboard);
-            EditorGUI.FocusTextInControl(null);
-        }
-        public void OnFinishedEditName()
-        {
-            mIsEditingName = false;
-            GUIUtility.hotControl = 0;
-        }
         public Vector3 GetLeftConnectionPoint()
         {
             return new Vector3(mRect.xMin,mRect.yMin+mRect.height/2.0f,0.0f);

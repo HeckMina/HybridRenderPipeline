@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 
 namespace Alice.Rendering
 {
-    public class RPNode : Node
+    public class RPNode : NodeEditor
     {
         public List<string> mDependentRTs=new List<string>();
         public string mOutputColor0="None", mOutputDS="None";
@@ -21,7 +21,6 @@ namespace Alice.Rendering
         }
         override public void Draw()
         {
-
             if (mTextStyle == null)
             {
                 mTextStyle = new GUIStyle(GUI.skin.label);

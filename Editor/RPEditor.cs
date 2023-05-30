@@ -2,29 +2,32 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using Alice.Rendering.Hybrid;
+
 
 namespace Alice.Rendering
 {
     public class RPEditor : EditorWindow
     {
-        public List<Node> mNodes=new List<Node>();
+        public List<NodeEditor> mNodes=new List<NodeEditor>();
         public List<Link> mLinks = new List<Link>();
         Vector2 mLastMouseButtonDownPosition;
         Vector2 mDragPosition,mDragOffsetToLocalOriginalPosition;
-        Node mLastMiddleButtonTouchedNode = null;
-        Node mEditNameNode = null;
-        Node mCurrentSelectedNode = null;
+        NodeEditor mLastMiddleButtonTouchedNode = null;
+        NodeEditor mEditNameNode = null;
+        NodeEditor mCurrentSelectedNode = null;
         RTSetting mRTSettingInfo = new RTSetting();
         RPSetting mRPSettingInfo = new RPSetting(0,0,300,400);
-        Link mTempLink=null;
+        LinkEditor mTempLink=null;
         bool mbShowCreateOptions = false;
+        PipelineData mCurrentEditPipelineData;
         public static RPEditor mInstance = null;
         public RPEditor()
         {
             mInstance = this;
         }
         public void SetPipelineData(Hybrid.PipelineData inPipelineData){
-
+            mCurrentEditPipelineData=inPipelineData;
         }
         void OnGUI()
         {
@@ -51,7 +54,7 @@ namespace Alice.Rendering
                 mbShowCreateOptions = false;
             }
             //draw links
-            foreach (Link link in mLinks)
+            foreach (LinkEditor link in mLinks)
             {
                 link.Draw(position.size);
             }
@@ -60,7 +63,7 @@ namespace Alice.Rendering
                 mTempLink.Draw(position.size);
             }
         }
-        void OnEditName(Node inNode)
+        void OnEditName(NodeEditor inNode)
         {
             mEditNameNode = inNode;
         }
@@ -124,8 +127,8 @@ namespace Alice.Rendering
         }
         void OnMouseLeftButtonDown()
         {
-            Node touchedNode = null;
-            foreach (Node node in mNodes)
+            NodeEditor touchedNode = null;
+            foreach (NodeEditor node in mNodes)
             {
                 if (node.mRect.Contains(Event.current.mousePosition))
                 {
@@ -148,7 +151,7 @@ namespace Alice.Rendering
                         if (touchedNode.mIncomingLink != null)
                         {
                             Link link = touchedNode.mIncomingLink;
-                            Node other = GetNode(link.mStartRP);
+                            NodeEditor other = GetNode(link.mStartRP);
                             other.mOutgoingLink = null;
                             touchedNode.mIncomingLink = null;
                             mLinks.Remove(link);
@@ -159,7 +162,7 @@ namespace Alice.Rendering
                         if (touchedNode.mOutgoingLink != null)
                         {
                             Link link = touchedNode.mOutgoingLink;
-                            Node other = GetNode(link.mEndRP);
+                            NodeEditor other = GetNode(link.mEndRP);
                             other.mIncomingLink = null;
                             touchedNode.mOutgoingLink = null;
                             mLinks.Remove(link);
@@ -174,8 +177,8 @@ namespace Alice.Rendering
         }
         void OnMouseMiddleButtonDown()
         {
-            Node touchedNode = null;
-            foreach (Node node in mNodes)
+            NodeEditor touchedNode = null;
+            foreach (NodeEditor node in mNodes)
             {
                 if (node.mRect.Contains(Event.current.mousePosition))
                 {
@@ -212,8 +215,8 @@ namespace Alice.Rendering
         }
         void OnMouseLeftButtonUp()
         {
-            Node touchedNode = null;
-            foreach (Node node in mNodes)
+            NodeEditor touchedNode = null;
+            foreach (NodeEditor node in mNodes)
             {
                 if (node.mRect.Contains(Event.current.mousePosition))
                 {
@@ -235,7 +238,7 @@ namespace Alice.Rendering
                 }
                 else
                 {
-                    Node startNode = GetNode(mTempLink.mStartRP);
+                    NodeEditor startNode = GetNode(mTempLink.mStartRP);
                     startNode.mOutgoingLink = null;
                 }
                 GUI.changed = true;
@@ -277,7 +280,7 @@ namespace Alice.Rendering
                 {
                     float x = mCurrentSelectedNode.mRect.xMax;
                     float y = mCurrentSelectedNode.mRect.yMin + mCurrentSelectedNode.mRect.height / 2;
-                    mTempLink = new Link(new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f));
+                    mTempLink = new LinkEditor(new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f));
                     mTempLink.mStartRP = mCurrentSelectedNode.mID;
                     mCurrentSelectedNode.mOutgoingLink = mTempLink;
                 }
@@ -326,9 +329,9 @@ namespace Alice.Rendering
             }
             GUI.changed = true;
         }
-        Node GetNode(string inID)
+        NodeEditor GetNode(string inID)
         {
-            foreach(Node node in mNodes)
+            foreach(NodeEditor node in mNodes)
             {
                 if (node.mID.CompareTo(inID)==0) {
                     return node;
