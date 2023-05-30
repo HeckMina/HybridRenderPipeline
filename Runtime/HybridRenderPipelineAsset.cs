@@ -19,7 +19,6 @@ namespace Alice.Rendering.Hybrid
     {
         Shader m_DefaultShader;
 #if UNITY_EDITOR
-
         internal class CreateHybridPipelineAsset : EndNameEditAction
         {
             public override void Action(int instanceId, string pathName, string resourceFile)

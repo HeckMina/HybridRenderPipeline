@@ -17,7 +17,7 @@ namespace Alice.Rendering.Hybrid
     public class HybridRenderPipeline : RenderPipeline
     {
         HybridRenderer m_Renderer = new HybridRenderer();
-        PipelineData mPipelineData;
+        PipelineData mCurrentPipelineData;
         void CreateRenderer()
         {
             DestroyRenderer();
@@ -31,63 +31,365 @@ namespace Alice.Rendering.Hybrid
             m_Renderer.Dispose();
             m_Renderer = null;
         }
-        public const string k_ShaderTagName = "HybridPipeline";
-        public static float maxShadowBias
-        {
-            get => 10.0f;
-        }
-
-        public static float minRenderScale
-        {
-            get => 0.1f;
-        }
-
-        public static float maxRenderScale
-        {
-            get => 2.0f;
-        }
-        // Amount of Lights that can be shaded per object (in the for loop in the shader)
+        public static readonly ProfilingSampler beginContextRendering = new ProfilingSampler("HybridPipeline.beginContextRendering");
+        public static readonly ProfilingSampler endContextRendering = new ProfilingSampler("HybridPipeline.endContextRendering");
+        public static readonly ProfilingSampler beginCameraRendering = new ProfilingSampler("HybridPipeline.beginCameraRendering");
+        public static readonly ProfilingSampler endCameraRendering = new ProfilingSampler("HybridPipeline.endCameraRendering");
+        public static readonly ProfilingSampler setupPerFrameShaderConstants = new ProfilingSampler("HybridPipeline.SetupPerFrameShaderConstants");
         public static int maxPerObjectLights
         {
-            // No support to bitfield mask and int[] in gles2. Can't index fast more than 4 lights.
-            // Check Lighting.hlsl for more details.
             get => (SystemInfo.graphicsDeviceType == GraphicsDeviceType.OpenGLES2) ? 4 : 8;
         }
         public HybridRenderPipeline()
         {
-
         }
         public void SetPipelineData(PipelineData inPipelineData){
-            mPipelineData=inPipelineData;
+            mCurrentPipelineData=inPipelineData;
         }
-        protected override void Render(ScriptableRenderContext renderContext, Camera[] cameras)
+        static void SetupPerFrameShaderConstants()
         {
-            //Render(renderContext, new List<Camera>(cameras));
-        }
-        
-        private static class Profiling
-        {
-            private static Dictionary<int, ProfilingSampler> s_HashSamplerCache = new Dictionary<int, ProfilingSampler>();
-            public static readonly ProfilingSampler unknownSampler = new ProfilingSampler("Unknown");
+            using var profScope = new ProfilingScope(null, setupPerFrameShaderConstants);
 
-            // Specialization for camera loop to avoid allocations.
-            public static ProfilingSampler TryGetOrAddCameraSampler(Camera camera)
+            // When glossy reflections are OFF in the shader we set a constant color to use as indirect specular
+            SphericalHarmonicsL2 ambientSH = RenderSettings.ambientProbe;
+            Color linearGlossyEnvColor = new Color(ambientSH[0, 0], ambientSH[1, 0], ambientSH[2, 0]) * RenderSettings.reflectionIntensity;
+            Color glossyEnvColor = CoreUtils.ConvertLinearToActiveColorSpace(linearGlossyEnvColor);
+            Shader.SetGlobalVector(ShaderPropertyId.glossyEnvironmentColor, glossyEnvColor);
+
+            // Used as fallback cubemap for reflections
+            Shader.SetGlobalVector(ShaderPropertyId.glossyEnvironmentCubeMapHDR, ReflectionProbe.defaultTextureHDRDecodeValues);
+            Shader.SetGlobalTexture(ShaderPropertyId.glossyEnvironmentCubeMap, ReflectionProbe.defaultTexture);
+
+            // Ambient
+            Shader.SetGlobalVector(ShaderPropertyId.ambientSkyColor, CoreUtils.ConvertSRGBToActiveColorSpace(RenderSettings.ambientSkyColor));
+            Shader.SetGlobalVector(ShaderPropertyId.ambientEquatorColor, CoreUtils.ConvertSRGBToActiveColorSpace(RenderSettings.ambientEquatorColor));
+            Shader.SetGlobalVector(ShaderPropertyId.ambientGroundColor, CoreUtils.ConvertSRGBToActiveColorSpace(RenderSettings.ambientGroundColor));
+
+            // Used when subtractive mode is selected
+            Shader.SetGlobalVector(ShaderPropertyId.subtractiveShadowColor, CoreUtils.ConvertSRGBToActiveColorSpace(RenderSettings.subtractiveShadowColor));
+        }
+        bool NeedRenderCameraStack(Camera inCamera){
+            return inCamera.cameraType==CameraType.Game||inCamera.cameraType==CameraType.VR;
+        }
+        Comparison<Camera> cameraSort=(inCamera1,inCamera2)=>{return (int)inCamera1.depth-(int)inCamera2.depth;};
+        protected override void Render(ScriptableRenderContext inRenderContext, Camera[] inCameras)
+        {
+            List<Camera> cameraList=new List<Camera>(inCameras);
+            using (new ProfilingScope(null, beginContextRendering))
             {
-#if UNIVERSAL_PROFILING_NO_ALLOC
-                return unknownSampler;
-#else
-                ProfilingSampler ps = null;
-                int cameraId = camera.GetHashCode();
-                bool exists = s_HashSamplerCache.TryGetValue(cameraId, out ps);
-                if (!exists)
-                {
-                    // NOTE: camera.name allocates!
-                    //ps = new ProfilingSampler($"{nameof(HybridRenderPipeline)}.{nameof(RenderSingleCamera)}: {camera.name}");
-                    s_HashSamplerCache.Add(cameraId, ps);
-                }
-                return ps;
-#endif
+                BeginContextRendering(inRenderContext, cameraList);
             }
+            SetupPerFrameShaderConstants();
+            //sort camera
+            if(cameraList.Count>1){
+                cameraList.Sort(cameraSort);
+            }
+            for (int i = 0; i < cameraList.Count; ++i)
+            {
+                var camera = cameraList[i];
+                if (NeedRenderCameraStack(camera))
+                {
+                    RenderCameraStack(inRenderContext, camera);
+                }
+                else
+                {
+                    using (new ProfilingScope(null, beginCameraRendering))
+                    {
+                        BeginCameraRendering(inRenderContext, camera);
+                    }
+                    //RenderSingleCamera(inRenderContext, camera);
+                    using (new ProfilingScope(null, endCameraRendering))
+                    {
+                        EndCameraRendering(inRenderContext, camera);
+                    }
+                }
+            }
+            using (new ProfilingScope(null, endContextRendering))
+            {
+                EndContextRendering(inRenderContext, cameraList);
+            }
+        }
+        static void RenderCameraStack(ScriptableRenderContext context, Camera baseCamera)
+        {
+            /*using var profScope = new ProfilingScope(null, ProfilingSampler.Get(URPProfileId.RenderCameraStack));
+
+            baseCamera.TryGetComponent<UniversalAdditionalCameraData>(out var baseCameraAdditionalData);
+
+            // Overlay cameras will be rendered stacked while rendering base cameras
+            if (baseCameraAdditionalData != null && baseCameraAdditionalData.renderType == CameraRenderType.Overlay)
+                return;
+
+            // renderer contains a stack if it has additional data and the renderer supports stacking
+            var renderer = baseCameraAdditionalData?.scriptableRenderer;
+            bool supportsCameraStacking = renderer != null && renderer.supportedRenderingFeatures.cameraStacking;
+            List<Camera> cameraStack = (supportsCameraStacking) ? baseCameraAdditionalData?.cameraStack : null;
+
+            bool anyPostProcessingEnabled = baseCameraAdditionalData != null && baseCameraAdditionalData.renderPostProcessing;
+
+            // We need to know the last active camera in the stack to be able to resolve
+            // rendering to screen when rendering it. The last camera in the stack is not
+            // necessarily the last active one as it users might disable it.
+            int lastActiveOverlayCameraIndex = -1;
+            if (cameraStack != null)
+            {
+                var baseCameraRendererType = baseCameraAdditionalData?.scriptableRenderer.GetType();
+                bool shouldUpdateCameraStack = false;
+
+                for (int i = 0; i < cameraStack.Count; ++i)
+                {
+                    Camera currCamera = cameraStack[i];
+                    if (currCamera == null)
+                    {
+                        shouldUpdateCameraStack = true;
+                        continue;
+                    }
+
+                    if (currCamera.isActiveAndEnabled)
+                    {
+                        currCamera.TryGetComponent<UniversalAdditionalCameraData>(out var data);
+
+                        if (data == null || data.renderType != CameraRenderType.Overlay)
+                        {
+                            Debug.LogWarning(string.Format("Stack can only contain Overlay cameras. {0} will skip rendering.", currCamera.name));
+                            continue;
+                        }
+
+                        var currCameraRendererType = data?.scriptableRenderer.GetType();
+                        if (currCameraRendererType != baseCameraRendererType)
+                        {
+                            var renderer2DType = typeof(Renderer2D);
+                            if (currCameraRendererType != renderer2DType && baseCameraRendererType != renderer2DType)
+                            {
+                                Debug.LogWarning(string.Format("Only cameras with compatible renderer types can be stacked. {0} will skip rendering", currCamera.name));
+                                continue;
+                            }
+                        }
+
+                        anyPostProcessingEnabled |= data.renderPostProcessing;
+                        lastActiveOverlayCameraIndex = i;
+                    }
+                }
+                if (shouldUpdateCameraStack)
+                {
+                    baseCameraAdditionalData.UpdateCameraStack();
+                }
+            }
+
+            // Post-processing not supported in GLES2.
+            anyPostProcessingEnabled &= SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES2;
+
+            bool isStackedRendering = lastActiveOverlayCameraIndex != -1;
+
+#if ENABLE_VR && ENABLE_XR_MODULE
+            var xrActive = false;
+            var xrRendering = true;
+            if (baseCameraAdditionalData != null)
+                xrRendering = baseCameraAdditionalData.allowXRRendering;
+            var xrPasses = m_XRSystem.SetupFrame(baseCamera, xrRendering);
+            foreach (XRPass xrPass in xrPasses)
+            {
+                if (xrPass.enabled)
+                {
+                    xrActive = true;
+                    UpdateCameraStereoMatrices(baseCamera, xrPass);
+                }
+#endif
+
+            using (new ProfilingScope(null, Profiling.Pipeline.beginCameraRendering))
+            {
+                BeginCameraRendering(context, baseCamera);
+            }
+            // Update volumeframework before initializing additional camera data
+            UpdateVolumeFramework(baseCamera, baseCameraAdditionalData);
+            InitializeCameraData(baseCamera, baseCameraAdditionalData, !isStackedRendering, out var baseCameraData);
+            RenderTextureDescriptor originalTargetDesc = baseCameraData.cameraTargetDescriptor;
+
+#if ENABLE_VR && ENABLE_XR_MODULE
+            if (xrPass.enabled)
+            {
+                baseCameraData.xr = xrPass;
+                // XRTODO: remove isStereoEnabled in 2021.x
+#pragma warning disable 0618
+                baseCameraData.isStereoEnabled = xrPass.enabled;
+#pragma warning restore 0618
+
+                // Helper function for updating cameraData with xrPass Data
+                m_XRSystem.UpdateCameraData(ref baseCameraData, baseCameraData.xr);
+                // Need to update XRSystem using baseCameraData to handle the case where camera position is modified in BeginCameraRendering
+                m_XRSystem.UpdateFromCamera(ref baseCameraData.xr, baseCameraData);
+                m_XRSystem.BeginLateLatching(baseCamera, xrPass);
+            }
+#endif
+
+#if VISUAL_EFFECT_GRAPH_0_0_1_OR_NEWER
+            //It should be called before culling to prepare material. When there isn't any VisualEffect component, this method has no effect.
+            VFX.VFXManager.PrepareCamera(baseCamera);
+#endif
+#if ADAPTIVE_PERFORMANCE_2_0_0_OR_NEWER
+            if (asset.useAdaptivePerformance)
+                ApplyAdaptivePerformance(ref baseCameraData);
+#endif
+            RenderSingleCamera(context, baseCameraData, anyPostProcessingEnabled);
+            using (new ProfilingScope(null, Profiling.Pipeline.endCameraRendering))
+            {
+                EndCameraRendering(context, baseCamera);
+            }
+
+#if ENABLE_VR && ENABLE_XR_MODULE
+            m_XRSystem.EndLateLatching(baseCamera, xrPass);
+#endif
+
+            if (isStackedRendering)
+            {
+                for (int i = 0; i < cameraStack.Count; ++i)
+                {
+                    var currCamera = cameraStack[i];
+                    if (!currCamera.isActiveAndEnabled)
+                        continue;
+
+                    currCamera.TryGetComponent<UniversalAdditionalCameraData>(out var currCameraData);
+                    // Camera is overlay and enabled
+                    if (currCameraData != null)
+                    {
+                        // Copy base settings from base camera data and initialize initialize remaining specific settings for this camera type.
+                        CameraData overlayCameraData = baseCameraData;
+                        bool lastCamera = i == lastActiveOverlayCameraIndex;
+
+#if ENABLE_VR && ENABLE_XR_MODULE
+                        UpdateCameraStereoMatrices(currCameraData.camera, xrPass);
+#endif
+
+                        using (new ProfilingScope(null, Profiling.Pipeline.beginCameraRendering))
+                        {
+                            BeginCameraRendering(context, currCamera);
+                        }
+#if VISUAL_EFFECT_GRAPH_0_0_1_OR_NEWER
+                        //It should be called before culling to prepare material. When there isn't any VisualEffect component, this method has no effect.
+                        VFX.VFXManager.PrepareCamera(currCamera);
+#endif
+                        UpdateVolumeFramework(currCamera, currCameraData);
+                        InitializeAdditionalCameraData(currCamera, currCameraData, lastCamera, ref overlayCameraData);
+#if ENABLE_VR && ENABLE_XR_MODULE
+                        if (baseCameraData.xr.enabled)
+                            m_XRSystem.UpdateFromCamera(ref overlayCameraData.xr, overlayCameraData);
+#endif
+                        RenderSingleCamera(context, overlayCameraData, anyPostProcessingEnabled);
+
+                        using (new ProfilingScope(null, Profiling.Pipeline.endCameraRendering))
+                        {
+                            EndCameraRendering(context, currCamera);
+                        }
+                    }
+                }
+            }
+
+#if ENABLE_VR && ENABLE_XR_MODULE
+            if (baseCameraData.xr.enabled)
+                baseCameraData.cameraTargetDescriptor = originalTargetDesc;
+        }
+
+        if (xrActive)
+        {
+            CommandBuffer cmd = CommandBufferPool.Get();
+            using (new ProfilingScope(cmd, Profiling.Pipeline.XR.mirrorView))
+            {
+                m_XRSystem.RenderMirrorView(cmd, baseCamera);
+            }
+
+            context.ExecuteCommandBuffer(cmd);
+            context.Submit();
+            CommandBufferPool.Release(cmd);
+        }
+
+        m_XRSystem.ReleaseFrame();
+#endif*/
+        }
+
+        static void RenderSingleCamera(ScriptableRenderContext context, CameraData cameraData)
+        {
+            /*Camera camera = cameraData.camera;
+            var renderer = cameraData.renderer;
+            if (renderer == null)
+            {
+                Debug.LogWarning(string.Format("Trying to render {0} with an invalid renderer. Camera rendering will be skipped.", camera.name));
+                return;
+            }
+
+            if (!TryGetCullingParameters(cameraData, out var cullingParameters))
+                return;
+
+            ScriptableRenderer.current = renderer;
+            bool isSceneViewCamera = cameraData.isSceneViewCamera;
+
+            // NOTE: Do NOT mix ProfilingScope with named CommandBuffers i.e. CommandBufferPool.Get("name").
+            // Currently there's an issue which results in mismatched markers.
+            // The named CommandBuffer will close its "profiling scope" on execution.
+            // That will orphan ProfilingScope markers as the named CommandBuffer markers are their parents.
+            // Resulting in following pattern:
+            // exec(cmd.start, scope.start, cmd.end) and exec(cmd.start, scope.end, cmd.end)
+            CommandBuffer cmd = CommandBufferPool.Get();
+
+            // TODO: move skybox code from C++ to URP in order to remove the call to context.Submit() inside DrawSkyboxPass
+            // Until then, we can't use nested profiling scopes with XR multipass
+            CommandBuffer cmdScope = cameraData.xr.enabled ? null : cmd;
+
+            ProfilingSampler sampler = Profiling.TryGetOrAddCameraSampler(camera);
+            using (new ProfilingScope(cmdScope, sampler)) // Enqueues a "BeginSample" command into the CommandBuffer cmd
+            {
+                renderer.Clear(cameraData.renderType);
+
+                using (new ProfilingScope(null, Profiling.Pipeline.Renderer.setupCullingParameters))
+                {
+                    renderer.OnPreCullRenderPasses(in cameraData);
+                    renderer.SetupCullingParameters(ref cullingParameters, ref cameraData);
+                }
+
+                context.ExecuteCommandBuffer(cmd); // Send all the commands enqueued so far in the CommandBuffer cmd, to the ScriptableRenderContext context
+                cmd.Clear();
+
+#if UNITY_EDITOR
+                // Emit scene view UI
+                if (isSceneViewCamera)
+                {
+                    ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
+                }
+#endif
+
+                var cullResults = context.Cull(ref cullingParameters);
+                InitializeRenderingData(asset, ref cameraData, ref cullResults, anyPostProcessingEnabled, out var renderingData);
+
+#if ADAPTIVE_PERFORMANCE_2_0_0_OR_NEWER
+                if (asset.useAdaptivePerformance)
+                    ApplyAdaptivePerformance(ref renderingData);
+#endif
+
+                using (new ProfilingScope(null, Profiling.Pipeline.Renderer.setup))
+                {
+                    renderer.Setup(context, ref renderingData);
+                }
+
+                // Timing scope inside
+                renderer.Execute(context, ref renderingData);
+                CleanupLightData(ref renderingData.lightData);
+            } // When ProfilingSample goes out of scope, an "EndSample" command is enqueued into CommandBuffer cmd
+
+            cameraData.xr.EndCamera(cmd, cameraData);
+            context.ExecuteCommandBuffer(cmd); // Sends to ScriptableRenderContext all the commands enqueued since cmd.Clear, i.e the "EndSample" command
+            CommandBufferPool.Release(cmd);
+
+            using (new ProfilingScope(null, Profiling.Pipeline.Context.submit))
+            {
+                if (renderer.useRenderPassEnabled && !context.SubmitForRenderPassValidation())
+                {
+                    renderer.useRenderPassEnabled = false;
+                    CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.RenderPassEnabled, false);
+                    Debug.LogWarning("Rendering command not supported inside a native RenderPass found. Falling back to non-RenderPass rendering path");
+                }
+                context.Submit(); // Actually execute the commands that we previously sent to the ScriptableRenderContext context
+            }
+
+            ScriptableRenderer.current = null;*/
+        }
 
             /*public static class Pipeline
             {
@@ -1448,6 +1750,5 @@ namespace Alice.Rendering.Hybrid
 
     #endif
         }*/
-        }
     }
 }
