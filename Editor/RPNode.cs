@@ -14,6 +14,9 @@ namespace Alice.Rendering
         public RenderBufferStoreAction mColorRTStoreAction=RenderBufferStoreAction.Store;
         public RenderBufferLoadAction mDSRTLoadAction=RenderBufferLoadAction.Load;
         public RenderBufferStoreAction mDSRTStoreAction=RenderBufferStoreAction.Store;
+        public List<string> mLightModes=new List<string>();
+        public RenderQueueRange mRenderQueueRange=RenderQueueRange.opaque;
+        public int mLayerMask { get; set; }
         GUIStyle mTextStyle = null;
         public RPNode(float inX, float inY, float inWidth, float inHeight) : base(inX, inY, inWidth, inHeight)
         {

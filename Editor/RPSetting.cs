@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using UnityEngine.Rendering;
+using System.Reflection;
+using System;
+using System.Linq;
 
 namespace Alice.Rendering
 {
@@ -17,27 +20,18 @@ namespace Alice.Rendering
         {
             mRect=new Rect(inX,inY,inWidth,inHeight);
         }
-        public void Draw(Vector2 inContainerSize, RPNode inRPNode)
-        {
-            mCurrentEdittingNode = inRPNode;
-            if (mBackgroundTexture == null)
-            {
-                mBackgroundTexture = new Texture2D(1, 1);
-                mBackgroundTexture.SetPixel(0, 0, new Color(0.0f, 0.0f, 0.0f, 0.5f));
-                mBackgroundTexture.Apply();
-            }
-            mRect = new Rect(inContainerSize.x - mRect.width, 0, mRect.width,mRect.height);
-            List<string> rts = new List<string>();
-            rts.Add("None");
-            RPEditor.mInstance.mNodes.ForEach((node) => { if (node.GetType() == typeof(RTNode)) { rts.Add(node.mName); } });
+        int AdvanceVertical(int inCurrentYPos){
+            return inCurrentYPos+mPadding;
+        }
+        int DrawTitle(Vector2 inContainerSize){
             int currentPosY = mPadding;
-            GUI.DrawTexture(mRect, mBackgroundTexture);
             GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent(mCurrentEdittingNode.mName + " Settings"));
-            //dependent prior rts
-            currentPosY += 20 + mPadding;
-            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("依赖的RT："));
-            currentPosY += 20 + mPadding;
-            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, mRect.width - mPadding*2, 20));
+            return AdvanceVertical(currentPosY+20);
+        }
+        int DrawDependentRTs(Vector2 inContainerSize,int inYStartPosition,List<string> inRenderTargets){
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("依赖的RT："));
+            inYStartPosition += 20 + mPadding;
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, mRect.width - mPadding*2, 20));
             if (GUILayout.Button("+"))
             {
                 mCurrentEdittingNode.mDependentRTs.Add("None");
@@ -48,13 +42,12 @@ namespace Alice.Rendering
             for (int i=0;i<mCurrentEdittingNode.mDependentRTs.Count;i++)
             {
                 string dependentRT = mCurrentEdittingNode.mDependentRTs[i];
-                currentPosY += 20 + mPadding;
-                GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, mRect.width - mPadding * 3 - 20, 20));
-                selectedOption = rts.IndexOf(dependentRT);
-                selectedOption = EditorGUILayout.Popup(selectedOption, rts.ToArray());
-                //mCurrentEdittingNode.mDependentRTs[i] = rts[selectedOption];
+                inYStartPosition += 20 + mPadding;
+                GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, mRect.width - mPadding * 3 - 20, 20));
+                selectedOption = inRenderTargets.IndexOf(dependentRT);
+                selectedOption = EditorGUILayout.Popup(selectedOption, inRenderTargets.ToArray());
                 GUILayout.EndArea();
-                GUILayout.BeginArea(new Rect(inContainerSize.x - 24 + mPadding, currentPosY, 20, 20));
+                GUILayout.BeginArea(new Rect(inContainerSize.x - 24 + mPadding, inYStartPosition, 20, 20));
                 if (GUILayout.Button("x"))
                 {
                     dependentRTToDelete = i;
@@ -65,53 +58,107 @@ namespace Alice.Rendering
             {
                 mCurrentEdittingNode.mDependentRTs.RemoveAt(dependentRTToDelete);
             }
-            //render target
-            currentPosY += 20 + mPadding;
-            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("颜色输出"));
-            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2.0f, currentPosY, mRect.width/2.0f - mPadding, 20));
-            selectedOption = rts.IndexOf(mCurrentEdittingNode.mOutputColor0);
-            selectedOption = EditorGUILayout.Popup(selectedOption, rts.ToArray());
-            mCurrentEdittingNode.mOutputColor0 = rts.ToArray()[selectedOption];
+            return AdvanceVertical(inYStartPosition+20);
+        }
+        int DrawRenderTargetSettings(Vector2 inContainerSize,int inYStartPosition,List<string> inRenderTargets){
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("颜色输出"));
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2.0f, inYStartPosition, mRect.width/2.0f - mPadding, 20));
+            int selectedOption = inRenderTargets.IndexOf(mCurrentEdittingNode.mOutputColor0);
+            selectedOption = EditorGUILayout.Popup(selectedOption, inRenderTargets.ToArray());
+            mCurrentEdittingNode.mOutputColor0 = inRenderTargets.ToArray()[selectedOption];
             GUILayout.EndArea();
-            currentPosY += 20 + mPadding;
-            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("深度/蒙版输出"));
-            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2.0f, currentPosY, mRect.width/2.0f - mPadding, 20));
-            selectedOption = rts.IndexOf(mCurrentEdittingNode.mOutputDS);
-            selectedOption = EditorGUILayout.Popup(selectedOption, rts.ToArray());
-            mCurrentEdittingNode.mOutputDS = rts.ToArray()[selectedOption];
+            inYStartPosition += 20 + mPadding;
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("深度/蒙版输出"));
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2.0f, inYStartPosition, mRect.width/2.0f - mPadding, 20));
+            selectedOption = inRenderTargets.IndexOf(mCurrentEdittingNode.mOutputDS);
+            selectedOption = EditorGUILayout.Popup(selectedOption, inRenderTargets.ToArray());
+            mCurrentEdittingNode.mOutputDS = inRenderTargets.ToArray()[selectedOption];
             GUILayout.EndArea();
+            inYStartPosition += 20 + mPadding;
             //color rt load / store action
-            currentPosY += 20 + mPadding;
-            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("ColorBufferLoadAction"));
-            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, currentPosY, mRect.width/2.0f - mPadding, 20));
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("ColorBufferLoadAction"));
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, inYStartPosition, mRect.width/2.0f - mPadding, 20));
             selectedOption = (int)mCurrentEdittingNode.mColorRTLoadAction;
             selectedOption = EditorGUILayout.Popup(selectedOption, typeof(RenderBufferLoadAction).GetEnumNames());
             mCurrentEdittingNode.mColorRTLoadAction = (RenderBufferLoadAction)selectedOption;
             GUILayout.EndArea();
-            currentPosY += 20 + mPadding;
-            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("ColorBufferStoreAction"));
-            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, currentPosY, mRect.width/2.0f - mPadding, 20));
+            inYStartPosition += 20 + mPadding;
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("ColorBufferStoreAction"));
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, inYStartPosition, mRect.width/2.0f - mPadding, 20));
             selectedOption = (int)mCurrentEdittingNode.mColorRTStoreAction;
             selectedOption = EditorGUILayout.Popup(selectedOption, typeof(RenderBufferStoreAction).GetEnumNames());
             mCurrentEdittingNode.mColorRTStoreAction = (RenderBufferStoreAction)selectedOption;
             GUILayout.EndArea();
+            inYStartPosition += 20 + mPadding;
             //ds rt load / store action
-            currentPosY += 20 + mPadding;
-            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("DSBufferLoadAction"));
-            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, currentPosY, mRect.width/2.0f - mPadding, 20));
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("DSBufferLoadAction"));
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, inYStartPosition, mRect.width/2.0f - mPadding, 20));
             selectedOption = (int)mCurrentEdittingNode.mColorRTLoadAction;
             selectedOption = EditorGUILayout.Popup(selectedOption, typeof(RenderBufferLoadAction).GetEnumNames());
             mCurrentEdittingNode.mDSRTLoadAction = (RenderBufferLoadAction)selectedOption;
             GUILayout.EndArea();
-            currentPosY += 20 + mPadding;
-            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("DSBufferStoreAction"));
-            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, currentPosY, mRect.width/2.0f - mPadding, 20));
+            inYStartPosition += 20 + mPadding;
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("DSBufferStoreAction"));
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2, inYStartPosition, mRect.width/2.0f - mPadding, 20));
             selectedOption = (int)mCurrentEdittingNode.mDSRTStoreAction;
             selectedOption = EditorGUILayout.Popup(selectedOption, typeof(RenderBufferStoreAction).GetEnumNames());
             mCurrentEdittingNode.mDSRTStoreAction = (RenderBufferStoreAction)selectedOption;
             GUILayout.EndArea();
-            currentPosY += 20 + mPadding;
+            return AdvanceVertical(inYStartPosition+20);
+        }
+        int DrawAttachedRenderScript(Vector2 inContainerSize,int inYStartPosition){
+            GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, inYStartPosition, inContainerSize.x - mPadding, 20), new GUIContent("选择RenderPass"));
+            GUILayout.BeginArea(new Rect(inContainerSize.x - mRect.width/2.0f, inYStartPosition, mRect.width/2.0f - mPadding, 20));
+
+            List<string> scriptableRenderPasses=new List<string>();
+            {
+                Assembly assembly = Assembly.LoadFrom("E:/UnityProjects/URPAdapter/Library/ScriptAssemblies/Unity.RenderPipelines.Universal.Runtime.dll");
+                Type typeScriptableRenderPass = assembly.GetType("UnityEngine.Rendering.Universal.ScriptableRenderPass");
+                if (typeScriptableRenderPass != null)
+                {
+                    Type[] subTypes = assembly.GetTypes().Where(t => t.IsSubclassOf(typeScriptableRenderPass)).ToArray();
+                    foreach (Type subType in subTypes)
+                    {
+                        scriptableRenderPasses.Add(subType.GetTypeInfo().Name);
+                    }
+                }else{
+                    Debug.Log("Canonot find UnityEngine.Rendering.Universal.ScriptableRenderPass");
+                }
+            }
+            int selectedOption=0;
+            selectedOption = EditorGUILayout.Popup(selectedOption, scriptableRenderPasses.ToArray());
+            GUILayout.EndArea();
+            return AdvanceVertical(inYStartPosition+20);
+        }
+        public void Draw(Vector2 inContainerSize, RPNode inRPNode)
+        {
+            mCurrentEdittingNode = inRPNode;
+            if (mBackgroundTexture == null)
+            {
+                mBackgroundTexture = new Texture2D(1, 1);
+                mBackgroundTexture.SetPixel(0, 0, new Color(0.0f, 0.0f, 0.0f, 0.5f));
+                mBackgroundTexture.Apply();
+            }
+            int contentHeight=0;
+            mRect = new Rect(inContainerSize.x - mRect.width, 0, mRect.width,mRect.height);
+            GUI.DrawTexture(mRect, mBackgroundTexture);
+            List<string> renderTargetNames = new List<string>();
+            renderTargetNames.Add("None");
+            RPEditor.mInstance.mNodes.ForEach((node) => { if (node.GetType() == typeof(RTNode)) { renderTargetNames.Add(node.mName); } });
+            //draw title
+            int currentPosY=DrawTitle(inContainerSize);
+            //dependent prior rts
+            currentPosY=DrawDependentRTs(inContainerSize,currentPosY,renderTargetNames);
+            //render target
+            currentPosY=DrawRenderTargetSettings(inContainerSize,currentPosY,renderTargetNames);
+            //render script
+            currentPosY=DrawAttachedRenderScript(inContainerSize,currentPosY);
             GUI.Label(new Rect(inContainerSize.x - mRect.width + mPadding, currentPosY, inContainerSize.x - mPadding, 20), new GUIContent("其它设置待迭代..."));
+            contentHeight=AdvanceVertical(currentPosY+20);
+            if(contentHeight!=mRect.height){
+                mRect.height=contentHeight;
+                GUI.changed=true;
+            }
         }
     }
 }
