@@ -9,25 +9,64 @@ namespace Alice.Rendering
 {
     public class RPEditor : EditorWindow
     {
-        public List<NodeEditor> mNodes=new List<NodeEditor>();
+        public List<Node> mNodes=new List<Node>();
         public List<Link> mLinks = new List<Link>();
         Vector2 mLastMouseButtonDownPosition;
         Vector2 mDragPosition,mDragOffsetToLocalOriginalPosition;
-        NodeEditor mLastMiddleButtonTouchedNode = null;
-        NodeEditor mEditNameNode = null;
-        NodeEditor mCurrentSelectedNode = null;
+        Node mLastMiddleButtonTouchedNode = null;
+        Node mEditNameNode = null;
+        Node mCurrentSelectedNode = null;
         RTSetting mRTSettingInfo = new RTSetting();
         RPSetting mRPSettingInfo = new RPSetting(0,0,300,400);
         LinkEditor mTempLink=null;
         bool mbShowCreateOptions = false;
-        PipelineData mCurrentEditPipelineData;
+        HybridPipelineData mCurrentEditPipelineData;
         public static RPEditor mInstance = null;
         public RPEditor()
         {
             mInstance = this;
         }
-        public void SetPipelineData(Hybrid.PipelineData inPipelineData){
+        public void SetPipelineData(Hybrid.HybridPipelineData inPipelineData){
             mCurrentEditPipelineData=inPipelineData;
+            for(int i=0;i<mCurrentEditPipelineData.RenderPasses.Count;++i){
+                RPNodeEditor node=new RPNodeEditor(mCurrentEditPipelineData.RenderPassRects[i]);
+                node.mName=mCurrentEditPipelineData.RenderPasses[i];
+                node.mID=mCurrentEditPipelineData.RenderPassIDs[i];
+                node.mAttachedScriptName=mCurrentEditPipelineData.RenderPassScriptNames[i];
+                node.mQueue=mCurrentEditPipelineData.RenderPassQueues[i];
+                node.mLayerMask=mCurrentEditPipelineData.RenderPassLayerMasks[i];
+                node.mEnterRenderPassAction=mCurrentEditPipelineData.RenderPassOnEnterActions[i];
+                node.mColorRTLoadAction=mCurrentEditPipelineData.RenderPassColor0LoadActions[i];
+                node.mColorRTStoreAction=mCurrentEditPipelineData.RenderPassColor0StoreActions[i];
+                node.mDSRTLoadAction=mCurrentEditPipelineData.RenderPassDSLoadActions[i];
+                node.mDSRTStoreAction=mCurrentEditPipelineData.RenderPassDSStoreActions[i];
+                node.mOutputColor0=mCurrentEditPipelineData.RenderPassColor0Outputs[i];
+                node.mOutputDS=mCurrentEditPipelineData.RenderPassDSOutputs[i];
+                mNodes.Add(node);
+            }
+            for(int i=0;i<mCurrentEditPipelineData.RenderPassLightModes.Count;++i){
+                string lightMode=mCurrentEditPipelineData.RenderPassLightModes[i];
+                string[] splited=lightMode.Split('+');
+                RPNodeEditor node=GetNode(splited[0]) as RPNodeEditor;
+                node.mLightModes.Add(splited[1]);
+            }
+            for(int i=0;i<mCurrentEditPipelineData.RenderTargets.Count;++i){
+                RTNodeEditor node=new RTNodeEditor(mCurrentEditPipelineData.RenderTargetRects[i]);
+                node.mName=mCurrentEditPipelineData.RenderTargets[i];
+                node.mID=mCurrentEditPipelineData.RenderTargetIDs[i];
+                node.mFormat=mCurrentEditPipelineData.RenderTargetFormats[i];
+                mNodes.Add(node);
+            }
+            for(int i=0;i<mCurrentEditPipelineData.Links.Count;i+=2){
+                RPNodeEditor startNode=GetNode(mCurrentEditPipelineData.Links[0]) as RPNodeEditor;
+                RPNodeEditor endNode=GetNode(mCurrentEditPipelineData.Links[1]) as RPNodeEditor;
+                LinkEditor link=new LinkEditor(startNode.GetRightConnectionPoint(),endNode.GetLeftConnectionPoint());
+                link.mStartRP=startNode.mID;
+                link.mEndRP=endNode.mID;
+                startNode.mOutgoingLink=link;
+                endNode.mIncomingLink=link;
+                mLinks.Add(link);
+            }
         }
         void OnGUI()
         {
@@ -35,16 +74,16 @@ namespace Alice.Rendering
             //draw graphic node
             foreach (Node node in mNodes)
             {
-                node.Draw();
+                node.Draw(mEditNameNode==node);
             }
             if (mCurrentSelectedNode != null)
             {
-                if (mCurrentSelectedNode.GetType() == typeof(RPNode))
+                if (mCurrentSelectedNode.GetType() == typeof(RPNodeEditor))
                 {
-                    mRPSettingInfo.Draw(position.size, (RPNode)mCurrentSelectedNode);
-                }else if(mCurrentSelectedNode.GetType() == typeof(RTNode))
+                    mRPSettingInfo.Draw(position.size, (RPNodeEditor)mCurrentSelectedNode);
+                }else if(mCurrentSelectedNode.GetType() == typeof(RTNodeEditor))
                 {
-                    mRTSettingInfo.Draw(position.size, mCurrentSelectedNode as RTNode);
+                    mRTSettingInfo.Draw(position.size, mCurrentSelectedNode as RTNodeEditor);
                 }
                
             }
@@ -63,19 +102,19 @@ namespace Alice.Rendering
                 mTempLink.Draw(position.size);
             }
         }
-        void OnEditName(NodeEditor inNode)
+        void OnEditName(Node inNode)
         {
             mEditNameNode = inNode;
         }
         void OnCreateRenderPass(float inX, float inY)
         {
-            RPNode rpNode = new RPNode(inX, inY, 120, 60);
+            RPNode rpNode = new RPNodeEditor(inX, inY, 120, 60);
             mNodes.Add(rpNode);
         }
         void OnCreateRenderTarget(float inX, float inY)
         {
-            RTNode rpNode = new RTNode(inX, inY, 100, 40);
-            mNodes.Add(rpNode);
+            RTNode rtNode = new RTNodeEditor(inX, inY, 100, 40);
+            mNodes.Add(rtNode);
         }
         void ProcessMouseEvent()
         {
@@ -127,8 +166,8 @@ namespace Alice.Rendering
         }
         void OnMouseLeftButtonDown()
         {
-            NodeEditor touchedNode = null;
-            foreach (NodeEditor node in mNodes)
+            Node touchedNode = null;
+            foreach (Node node in mNodes)
             {
                 if (node.mRect.Contains(Event.current.mousePosition))
                 {
@@ -151,7 +190,7 @@ namespace Alice.Rendering
                         if (touchedNode.mIncomingLink != null)
                         {
                             Link link = touchedNode.mIncomingLink;
-                            NodeEditor other = GetNode(link.mStartRP);
+                            Node other = GetNode(link.mStartRP);
                             other.mOutgoingLink = null;
                             touchedNode.mIncomingLink = null;
                             mLinks.Remove(link);
@@ -162,7 +201,7 @@ namespace Alice.Rendering
                         if (touchedNode.mOutgoingLink != null)
                         {
                             Link link = touchedNode.mOutgoingLink;
-                            NodeEditor other = GetNode(link.mEndRP);
+                            Node other = GetNode(link.mEndRP);
                             other.mIncomingLink = null;
                             touchedNode.mOutgoingLink = null;
                             mLinks.Remove(link);
@@ -177,8 +216,8 @@ namespace Alice.Rendering
         }
         void OnMouseMiddleButtonDown()
         {
-            NodeEditor touchedNode = null;
-            foreach (NodeEditor node in mNodes)
+            Node touchedNode = null;
+            foreach (Node node in mNodes)
             {
                 if (node.mRect.Contains(Event.current.mousePosition))
                 {
@@ -215,8 +254,8 @@ namespace Alice.Rendering
         }
         void OnMouseLeftButtonUp()
         {
-            NodeEditor touchedNode = null;
-            foreach (NodeEditor node in mNodes)
+            Node touchedNode = null;
+            foreach (Node node in mNodes)
             {
                 if (node.mRect.Contains(Event.current.mousePosition))
                 {
@@ -228,7 +267,7 @@ namespace Alice.Rendering
             {
                 if (touchedNode != null)
                 {
-                    if (typeof(RPNode) == touchedNode.GetType()&&mTempLink.mStartRP!=touchedNode.mID)
+                    if (typeof(RPNodeEditor) == touchedNode.GetType()&&mTempLink.mStartRP!=touchedNode.mID)
                     {
                         mTempLink.mEndRP = touchedNode.mID;
                         touchedNode.mIncomingLink = mTempLink;
@@ -238,7 +277,7 @@ namespace Alice.Rendering
                 }
                 else
                 {
-                    NodeEditor startNode = GetNode(mTempLink.mStartRP);
+                    Node startNode = GetNode(mTempLink.mStartRP);
                     startNode.mOutgoingLink = null;
                 }
                 GUI.changed = true;
@@ -276,11 +315,11 @@ namespace Alice.Rendering
         {
             if (mCurrentSelectedNode != null && mEditNameNode==null)
             {
-                if (mTempLink == null && mCurrentSelectedNode.mOutgoingLink == null && mCurrentSelectedNode.GetType()==typeof(RPNode))
+                if (mTempLink == null && mCurrentSelectedNode.mOutgoingLink == null && mCurrentSelectedNode.GetType()==typeof(RPNodeEditor))
                 {
                     float x = mCurrentSelectedNode.mRect.xMax;
                     float y = mCurrentSelectedNode.mRect.yMin + mCurrentSelectedNode.mRect.height / 2;
-                    mTempLink = new LinkEditor(new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f));
+                    mTempLink = new LinkEditor(new Vector3(x, y, 0.0f), new Vector3(x, y, 0.0f));
                     mTempLink.mStartRP = mCurrentSelectedNode.mID;
                     mCurrentSelectedNode.mOutgoingLink = mTempLink;
                 }
@@ -329,15 +368,71 @@ namespace Alice.Rendering
             }
             GUI.changed = true;
         }
-        NodeEditor GetNode(string inID)
+        Node GetNode(string inID)
         {
-            foreach(NodeEditor node in mNodes)
+            foreach(Node node in mNodes)
             {
                 if (node.mID.CompareTo(inID)==0) {
                     return node;
                 }
             }
             return null;
+        }
+        void OnDisable(){
+            //save current editing pipeline data
+            mCurrentEditPipelineData.RenderPasses.Clear();
+            mCurrentEditPipelineData.RenderPassIDs.Clear();
+            mCurrentEditPipelineData.RenderPassRects.Clear();
+            mCurrentEditPipelineData.RenderTargets.Clear();
+            mCurrentEditPipelineData.RenderTargetIDs.Clear();
+            mCurrentEditPipelineData.RenderTargetRects.Clear();
+            mCurrentEditPipelineData.RenderTargetFormats.Clear();
+            mCurrentEditPipelineData.RenderPassColor0Outputs.Clear();
+            mCurrentEditPipelineData.RenderPassDSOutputs.Clear();
+            mCurrentEditPipelineData.RenderPassOnEnterActions.Clear();
+            mCurrentEditPipelineData.RenderPassColor0LoadActions.Clear();
+            mCurrentEditPipelineData.RenderPassColor0StoreActions.Clear();
+            mCurrentEditPipelineData.RenderPassDSLoadActions.Clear();
+            mCurrentEditPipelineData.RenderPassDSStoreActions.Clear();
+            mCurrentEditPipelineData.RenderPassLightModes.Clear();
+            mCurrentEditPipelineData.RenderPassQueues.Clear();
+            mCurrentEditPipelineData.RenderPassLayerMasks.Clear();
+            mCurrentEditPipelineData.RenderPassScriptNames.Clear();
+            mCurrentEditPipelineData.Links.Clear();
+            foreach(Node node in mNodes){
+                if(node.GetType()==typeof(RPNodeEditor)){
+                    RPNodeEditor rpNode=node as RPNodeEditor;
+                    mCurrentEditPipelineData.RenderPasses.Add(rpNode.mName);
+                    mCurrentEditPipelineData.RenderPassIDs.Add(rpNode.mID);
+                    mCurrentEditPipelineData.RenderPassRects.Add(rpNode.mRect);
+                    mCurrentEditPipelineData.RenderPassColor0Outputs.Add(rpNode.mOutputColor0);
+                    mCurrentEditPipelineData.RenderPassDSOutputs.Add(rpNode.mOutputDS);
+                    mCurrentEditPipelineData.RenderPassQueues.Add(rpNode.mQueue);
+                    mCurrentEditPipelineData.RenderPassLayerMasks.Add(rpNode.mLayerMask);
+                    mCurrentEditPipelineData.RenderPassScriptNames.Add(rpNode.mAttachedScriptName);
+                    mCurrentEditPipelineData.RenderPassOnEnterActions.Add(rpNode.mEnterRenderPassAction);
+                    mCurrentEditPipelineData.RenderPassColor0LoadActions.Add(rpNode.mColorRTLoadAction);
+                    mCurrentEditPipelineData.RenderPassColor0StoreActions.Add(rpNode.mColorRTStoreAction);
+                    mCurrentEditPipelineData.RenderPassDSLoadActions.Add(rpNode.mDSRTLoadAction);
+                    mCurrentEditPipelineData.RenderPassDSStoreActions.Add(rpNode.mDSRTStoreAction);
+                    foreach(string lightMode in rpNode.mLightModes){
+                        mCurrentEditPipelineData.RenderPassLightModes.Add(rpNode.mID+'+'+lightMode);
+                    }
+                }else{
+                    RTNodeEditor rtNode=node as RTNodeEditor;
+                    mCurrentEditPipelineData.RenderTargets.Add(rtNode.mName);
+                    mCurrentEditPipelineData.RenderTargetIDs.Add(rtNode.mID);
+                    mCurrentEditPipelineData.RenderTargetRects.Add(rtNode.mRect);
+                    mCurrentEditPipelineData.RenderTargetFormats.Add(rtNode.mFormat);
+                }
+            }
+            mCurrentEditPipelineData.Links=new List<string>();
+            foreach(Link link in mLinks){
+                mCurrentEditPipelineData.Links.Add(link.mStartRP);
+                mCurrentEditPipelineData.Links.Add(link.mEndRP);
+            }
+            EditorUtility.SetDirty(mCurrentEditPipelineData);
+            AssetDatabase.SaveAssets();
         }
     }
 }

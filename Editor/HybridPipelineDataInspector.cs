@@ -2,7 +2,7 @@ using UnityEditor;
 using UnityEngine;
 
 namespace Alice.Rendering.Hybrid{
-    [CustomEditor(typeof(PipelineData))]
+    [CustomEditor(typeof(HybridPipelineData))]
     public class PipelineDataEditor : Editor
     {
         public override void OnInspectorGUI()
@@ -16,7 +16,7 @@ namespace Alice.Rendering.Hybrid{
 
         private void EditPipelineData()
         {
-            PipelineData pipelineDataAsset = target as PipelineData;
+            HybridPipelineData pipelineDataAsset = target as HybridPipelineData;
             RPEditor window = EditorWindow.GetWindow<RPEditor>();
             window.SetPipelineData(pipelineDataAsset);
             window.titleContent = new GUIContent("渲染管线编辑器");

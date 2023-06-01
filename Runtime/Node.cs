@@ -9,15 +9,17 @@ namespace Alice.Rendering
     public class Node
     {
         public string mName = "Node";
-        public string mID = System.Guid.NewGuid().ToString();
-        public bool mIsEditingName = false;
+        public string mID = System.Guid.NewGuid().ToString().Replace("-","");
         public Rect mRect;
-        public Link mIncomingLink = null, mOutgoingLink = null;
+        public Link mIncomingLink = null;
+        public Link mOutgoingLink = null;
         public Node(float inX,float inY,float inWidth,float inHeight)
         {
             mRect = new Rect(inX, inY, inWidth, inHeight);
         }
-        virtual public void Draw() { }
+        virtual public void Draw(bool inIsEditingName){}
+        virtual public void OnEditName(){}
+        virtual public void OnFinishedEditName(){}
         public Vector3 GetLeftConnectionPoint()
         {
             return new Vector3(mRect.xMin,mRect.yMin+mRect.height/2.0f,0.0f);

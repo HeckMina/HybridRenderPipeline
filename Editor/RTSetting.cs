@@ -9,13 +9,13 @@ namespace Alice.Rendering
     {
         const int mPadding = 2;
         public string mName= "Render Target Settings";
-        public RTNode mCurrentEdittingNode;
+        public RTNodeEditor mCurrentEdittingNode;
         Texture2D mBackgroundTexture=null;
         public Rect mRect;
         public RTSetting()
         {
         }
-        public void Draw(Vector2 inContainerSize, RTNode inRTNode)
+        public void Draw(Vector2 inContainerSize, RTNodeEditor inRTNode)
         {
             if (mBackgroundTexture == null)
             {

@@ -30,7 +30,7 @@ namespace Alice.Rendering.Hybrid
         static RenderTargetIdentifier m_CameraDepthTarget;
         static RenderTargetHandle m_ColorTexture;
         static RenderTargetHandle m_DepthTexture;
-        PipelineData mCurrentPipelineData;
+        HybridPipelineData mCurrentPipelineData;
         public static readonly ProfilingSampler beginContextRendering = new ProfilingSampler("HybridPipeline.beginContextRendering");
         public static readonly ProfilingSampler endContextRendering = new ProfilingSampler("HybridPipeline.endContextRendering");
         public static readonly ProfilingSampler beginCameraRendering = new ProfilingSampler("HybridPipeline.beginCameraRendering");
@@ -43,7 +43,7 @@ namespace Alice.Rendering.Hybrid
         public HybridRenderPipeline()
         {
         }
-        public void SetPipelineData(PipelineData inPipelineData){
+        public void SetPipelineData(HybridPipelineData inPipelineData){
             mCurrentPipelineData=inPipelineData;
         }
         static void SetupPerFrameShaderConstants()

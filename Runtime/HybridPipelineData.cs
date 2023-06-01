@@ -13,17 +13,69 @@ using Alice.Rendering;
 
 namespace Alice.Rendering.Hybrid
 {
-    [ExcludeFromPreset]
-    public class PipelineData : ScriptableObject
+    public class HybridPipelineData : ScriptableObject
     {
-        public List<Node> mNodes=new List<Node>();
-        public List<Link> mLinks = new List<Link>();
+        [SerializeField]
+        public List<string> RenderPasses = new List<string>();
+        [SerializeField]
+        public List<string> RenderTargets = new List<string>();
+        [SerializeField]
+        [HideInInspector]
+        public List<UnityEngine.RenderTextureFormat> RenderTargetFormats = new List<UnityEngine.RenderTextureFormat>();
+        [SerializeField]
+        [HideInInspector]
+        public List<Rect> RenderPassRects = new List<Rect>();
+        [SerializeField]
+        [HideInInspector]
+        public List<Rect> RenderTargetRects = new List<Rect>();
+        [SerializeField]
+        [HideInInspector]
+        public List<String> RenderPassColor0Outputs = new List<String>();
+        [SerializeField]
+        [HideInInspector]
+        public List<String> RenderPassDSOutputs = new List<String>();
+        [SerializeField]
+        [HideInInspector]
+        public List<EnterRenderPassAction> RenderPassOnEnterActions = new List<EnterRenderPassAction>();
+        [SerializeField]
+        [HideInInspector]
+        public List<RenderBufferLoadAction> RenderPassColor0LoadActions = new List<RenderBufferLoadAction>();
+        [SerializeField]
+        [HideInInspector]
+        public List<RenderBufferStoreAction> RenderPassColor0StoreActions = new List<RenderBufferStoreAction>();
+        [SerializeField]
+        [HideInInspector]
+        public List<RenderBufferLoadAction> RenderPassDSLoadActions = new List<RenderBufferLoadAction>();
+        [SerializeField]
+        [HideInInspector]
+        public List<RenderBufferStoreAction> RenderPassDSStoreActions = new List<RenderBufferStoreAction>();
+        [SerializeField]
+        [HideInInspector]
+        public List<string> RenderPassLightModes = new List<string>();
+        [SerializeField]
+        [HideInInspector]
+        public List<string> RenderPassIDs = new List<string>();
+        [SerializeField]
+        [HideInInspector]
+        public List<string> RenderTargetIDs = new List<string>();
+        [SerializeField]
+        [HideInInspector]
+        public List<string> RenderPassQueues = new List<string>();
+        [SerializeField]
+        [HideInInspector]
+        public List<int> RenderPassLayerMasks = new List<int>();
+        [SerializeField]
+        [HideInInspector]
+        public List<string> RenderPassScriptNames = new List<string>();
+        [SerializeField]
+        [HideInInspector]
+        public List<string> Links = new List<string>();
 #if UNITY_EDITOR
         internal class CreateHybridPipelineDataAction : EndNameEditAction
         {
             public override void Action(int instanceId, string pathName, string resourceFile)
             {
-                AssetDatabase.CreateAsset(CreateInstance<PipelineData>(),pathName);
+                AssetDatabase.CreateAsset(CreateInstance<HybridPipelineData>(),pathName);
             }
         }
 
@@ -34,18 +86,5 @@ namespace Alice.Rendering.Hybrid
                 "New Pipeline Data.asset", null, null);
         }
 #endif
-        internal bool isInvalidated { get; set; }
-        public new void SetDirty()
-        {
-            isInvalidated = true;
-        }
-        protected virtual void OnValidate()
-        {
-            SetDirty();
-        }
-        protected virtual void OnEnable()
-        {
-            SetDirty();
-        }
     }
 }
