@@ -58,8 +58,8 @@ namespace Alice.Rendering
                 mNodes.Add(node);
             }
             for(int i=0;i<mCurrentEditPipelineData.Links.Count;i+=2){
-                RPNodeEditor startNode=GetNode(mCurrentEditPipelineData.Links[0]) as RPNodeEditor;
-                RPNodeEditor endNode=GetNode(mCurrentEditPipelineData.Links[1]) as RPNodeEditor;
+                RPNodeEditor startNode=GetNode(mCurrentEditPipelineData.Links[i]) as RPNodeEditor;
+                RPNodeEditor endNode=GetNode(mCurrentEditPipelineData.Links[i+1]) as RPNodeEditor;
                 LinkEditor link=new LinkEditor(startNode.GetRightConnectionPoint(),endNode.GetLeftConnectionPoint());
                 link.mStartRP=startNode.mID;
                 link.mEndRP=endNode.mID;
