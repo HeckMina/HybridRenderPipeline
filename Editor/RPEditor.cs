@@ -26,6 +26,18 @@ namespace Alice.Rendering
         {
             mInstance = this;
         }
+        void Awake()
+        {
+
+        }
+        void OnEnable()
+        {
+
+        }
+        void Reset()
+        {
+            Debug.Log("OnReset");
+        }
         public void SetPipelineData(Hybrid.HybridPipelineData inPipelineData){
             mCurrentEditPipelineData=inPipelineData;
             for(int i=0;i<mCurrentEditPipelineData.RenderPasses.Count;++i){
